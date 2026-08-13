@@ -32,13 +32,18 @@ if uploaded_file is not None:
     img_array = img_array / 255.0
 
     with st.spinner("Analyzing leaf..."):
-        prediction = model.predict(img_array)
-        predicted_index = int(np.argmax(prediction[0]))
-        predicted_class = class_names[str(predicted_index)]
-        confidence = round(float(np.max(prediction[0])) * 100, 2)
+        prediction = model.predict(img_array)[0]
+        top_3_indices = np.argsort(prediction)[-3:][::-1]
 
-    st.success(f"**Prediction:** {predicted_class}")
-    st.info(f"**Confidence:** {confidence}%")
+    st.success(f"**Top Prediction:** {class_names[str(top_3_indices[0])]}")
+    st.info(f"**Confidence:** {round(float(prediction[top_3_indices[0]]) * 100, 2)}%")
 
-    if confidence < 60:
+    st.write("---")
+    st.write("**Other possibilities:**")
+    for idx in top_3_indices[1:]:
+        name = class_names[str(idx)]
+        conf = round(float(prediction[idx]) * 100, 2)
+        st.write(f"- {name}: {conf}%")
+
+    if prediction[top_3_indices[0]] * 100 < 60:
         st.warning("Confidence is low — try a clearer, well-lit photo of a single leaf for better accuracy.")
