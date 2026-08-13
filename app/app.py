@@ -11,8 +11,10 @@ st.write("Upload a photo of a plant leaf, and the AI will diagnose potential dis
 
 @st.cache_resource
 def load_trained_model():
-    model = load_model('best_model.keras')
-    with open('class_names.json', 'r') as f:
+    import os
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    model = load_model(os.path.join(BASE_DIR, 'best_model.keras'))
+    with open(os.path.join(BASE_DIR, 'class_names.json'), 'r') as f:
         class_names = json.load(f)
     return model, class_names
 
