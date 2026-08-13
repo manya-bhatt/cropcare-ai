@@ -4,6 +4,7 @@ import json
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 from PIL import Image
+from groq import Groq
 
 st.set_page_config(page_title="CropCare AI", page_icon="🌿", layout="centered")
 st.title("🌿 CropCare AI — Plant Disease Detector")
@@ -19,6 +20,18 @@ def load_trained_model():
     return model, class_names
 
 model, class_names = load_trained_model()
+def get_treatment_advice(disease_name):
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+    clean_name = disease_name.replace("___", " - ").replace("_", " ")
+    
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "user", "content": f"A plant has been diagnosed with: {clean_name}. In under 100 words, give a farmer practical, actionable treatment and prevention advice."}
+        ],
+        max_tokens=200
+    )
+    return response.choices[0].message.content
 
 uploaded_file = st.file_uploader("Choose a leaf image...", type=["jpg", "jpeg", "png"])
 
@@ -39,11 +52,11 @@ if uploaded_file is not None:
     st.info(f"**Confidence:** {round(float(prediction[top_3_indices[0]]) * 100, 2)}%")
 
     st.write("---")
-    st.write("**Other possibilities:**")
-    for idx in top_3_indices[1:]:
-        name = class_names[str(idx)]
-        conf = round(float(prediction[idx]) * 100, 2)
-        st.write(f"- {name}: {conf}%")
+    st.subheader("🩺 Treatment Advice")
+    with st.spinner("Getting advice..."):
+        top_disease = class_names[str(top_3_indices[0])]
+        advice = get_treatment_advice(top_disease)
+    st.write(advice)
 
     if prediction[top_3_indices[0]] * 100 < 60:
         st.warning("Confidence is low — try a clearer, well-lit photo of a single leaf for better accuracy.")
