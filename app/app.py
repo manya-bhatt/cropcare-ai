@@ -24,16 +24,20 @@ def load_trained_model():
     return model, class_names
 
 model, class_names = load_trained_model()
-def get_treatment_advice(disease_name):
+def get_treatment_advice(disease_name, language="English"):
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     clean_name = disease_name.replace("___", " - ").replace("_", " ")
     
+    prompt = (
+        f"A plant has been diagnosed with: {clean_name}. "
+        f"In under 100 words, give a farmer practical, actionable treatment and prevention advice. "
+        f"Respond entirely in {language}, using simple, everyday language a farmer would understand."
+    )
+    
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "user", "content": f"A plant has been diagnosed with: {clean_name}. In under 100 words, give a farmer practical, actionable treatment and prevention advice."}
-        ],
-        max_tokens=200
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=300
     )
     return response.choices[0].message.content
 def make_gradcam_heatmap(img_array, model, last_conv_layer_name, pred_index=None):
@@ -65,6 +69,10 @@ def overlay_gradcam(original_img, heatmap, alpha=0.4):
     superimposed = cv2.addWeighted(img, 1 - alpha, heatmap_colored, alpha, 0)
     return superimposed
 
+language = st.selectbox(
+    "Choose advice language:",
+    ["English", "Hindi", "Marathi", "Tamil", "Telugu", "Bengali"]
+)
 uploaded_file = st.file_uploader("Choose a leaf image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
@@ -92,7 +100,7 @@ if uploaded_file is not None:
     st.subheader("🩺 Treatment Advice")
     with st.spinner("Getting advice..."):
         top_disease = class_names[str(top_3_indices[0])]
-        advice = get_treatment_advice(top_disease)
+        advice = get_treatment_advice(top_disease, language)
     st.write(advice)
 
     if prediction[top_3_indices[0]] * 100 < 60:
