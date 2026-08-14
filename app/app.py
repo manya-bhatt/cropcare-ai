@@ -11,6 +11,7 @@ import tensorflow as tf
 from fpdf import FPDF
 from datetime import datetime
 import tempfile
+import csv
 
 LAST_CONV_LAYER = "Conv_1"
 
@@ -121,6 +122,28 @@ def generate_pdf_report(original_img, gradcam_img, disease_name, confidence, top
 
     return bytes(pdf.output())
 
+def save_to_history(disease_name, confidence):
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    history_path = os.path.join(BASE_DIR, 'history.csv')
+    clean_name = disease_name.replace("___", " - ").replace("_", " ")
+    
+    file_exists = os.path.exists(history_path)
+    with open(history_path, 'a', newline='') as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["timestamp", "disease", "confidence"])
+        writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), clean_name, confidence])
+
+
+def load_history():
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    history_path = os.path.join(BASE_DIR, 'history.csv')
+    if not os.path.exists(history_path):
+        return []
+    with open(history_path, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        return list(reader)
+
 
 
 
@@ -132,7 +155,6 @@ language = st.selectbox(
 uploaded_file = st.file_uploader("Choose a leaf image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # 1. Uploaded image
     img = Image.open(uploaded_file).convert("RGB")
     st.image(img, caption="Uploaded Image", use_container_width=True)
 
@@ -170,6 +192,7 @@ if uploaded_file is not None:
         top_disease = class_names[str(top_3_indices[0])]
         advice = get_treatment_advice(top_disease, language)
     st.write(advice)
+    save_to_history(top_disease, round(float(prediction[top_3_indices[0]]) * 100, 2))
 
     if prediction[top_3_indices[0]] * 100 < 60:
         st.warning("Confidence is low — try a clearer, well-lit photo of a single leaf for better accuracy.")
@@ -194,3 +217,20 @@ if uploaded_file is not None:
         file_name="cropcare_diagnosis_report.pdf",
         mime="application/pdf"
     )
+    st.write("---")
+    st.subheader("📊 Recent Diagnosis History")
+    st.caption("Note: history reflects recent activity on this app instance and may reset periodically.")
+
+    history = load_history()
+    if len(history) == 0:
+        st.write("No diagnoses recorded yet.")
+    else:
+        import pandas as pd
+        df = pd.DataFrame(history)
+        df['confidence'] = df['confidence'].astype(float)
+
+        st.dataframe(df.tail(10).iloc[::-1], use_container_width=True)
+
+        st.write("**Most Frequently Detected:**")
+        disease_counts = df['disease'].value_counts().head(5)
+        st.bar_chart(disease_counts)
