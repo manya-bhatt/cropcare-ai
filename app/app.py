@@ -30,6 +30,11 @@ def load_trained_model():
 
 
 model, class_names = load_trained_model()
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+if "last_diagnosis" not in st.session_state:
+    st.session_state.last_diagnosis = None
 
 
 def get_treatment_advice(disease_name, language="English"):
@@ -47,6 +52,30 @@ def get_treatment_advice(disease_name, language="English"):
     )
     return response.choices[0].message.content
 
+def get_chatbot_response(chat_history, current_diagnosis=None):
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
+    system_context = (
+        "You are an agricultural assistant helping farmers with plant health, "
+        "diseases, pesticides, fertilizers, and crop care questions. "
+        "Keep answers practical, concise (under 150 words), and easy to understand."
+    )
+    if current_diagnosis:
+        system_context += f" The user's most recently diagnosed plant issue was: {current_diagnosis}."
+
+    messages = [{"role": "system", "content": system_context}]
+    for msg in chat_history[-6:]:
+        if msg.get("content"):
+            messages.append(msg)
+
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=messages,
+        max_tokens=300
+    )
+
+    answer = response.choices[0].message.content
+    return answer if answer else "Sorry, I couldn't generate a response. Please try rephrasing your question."
 
 def make_gradcam_heatmap(img_array, model, last_conv_layer_name, pred_index=None):
     grad_model = tf.keras.models.Model(
@@ -193,6 +222,7 @@ if uploaded_file is not None:
         advice = get_treatment_advice(top_disease, language)
     st.write(advice)
     save_to_history(top_disease, round(float(prediction[top_3_indices[0]]) * 100, 2))
+    st.session_state.last_diagnosis = top_disease.replace("___", " - ").replace("_", " ")
 
     if prediction[top_3_indices[0]] * 100 < 60:
         st.warning("Confidence is low — try a clearer, well-lit photo of a single leaf for better accuracy.")
@@ -234,3 +264,51 @@ if uploaded_file is not None:
         st.write("**Most Frequently Detected:**")
         disease_counts = df['disease'].value_counts().head(5)
         st.bar_chart(disease_counts)
+    st.write("---")
+    st.subheader("💬 Ask CropCare AI")
+    st.caption("Ask about plant diseases, pesticides, fertilizers, or general crop care.")
+
+    if st.session_state.last_diagnosis:
+        st.caption(f"Currently discussing: {st.session_state.last_diagnosis}")
+
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+           st.write(msg["content"])
+
+    user_question = st.chat_input("Type your question here...")
+
+    if user_question:
+        st.session_state.chat_history.append({"role": "user", "content": user_question})
+    with st.chat_message("user"):
+        st.write(user_question)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            answer = get_chatbot_response(
+                st.session_state.chat_history,
+                st.session_state.last_diagnosis
+            )
+        st.write(answer)
+
+    st.session_state.chat_history.append({"role": "assistant", "content": answer})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
